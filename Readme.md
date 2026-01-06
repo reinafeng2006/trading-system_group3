@@ -52,6 +52,13 @@ python run_live.py --symbol AAPL --asset-class stock --strategy ma --timeframe 1
 ```
 
 ## Quick start (Alpaca paper trading)
+0) Clone this repository by using an IDE (VS Code, Cursor) and running in powershell / terminal:
+```bash
+git clone https://github.com/Maroon-Capital-Trading-Project/Trading-System.git
+git pull
+```
+Alternatively, you can use Github Desktop for a user-friendly interface.
+
 1) Install dependencies:
 ```
 pip install -r requirements.txt
