@@ -231,3 +231,78 @@ class DemoStrategy(Strategy):
 ## To use your strategy:
 ##   python run_live.py --symbol AAPL --strategy mystrategy --live
 ##
+class SimpleMomentumConfidenceStrategy(Strategy):
+    """
+    Basic momentum strategy with a confidence ratio.
+
+    - Momentum: pct_change over lookback
+    - Volatility: rolling std of returns
+    - Confidence ratio: momentum / volatility
+    - Signal: long if conf_ratio > threshold, short if conf_ratio < -threshold, else flat
+    - Position sizing: scales with |conf_ratio| (capped)
+
+    Outputs:
+      - signal:  1 buy, -1 sell, 0 hold
+      - position: 1, -1, or 0
+      - target_qty: desired size
+
+    WHAT WE STILL NEED!!!!
+        - need to add barriers (if the swing is too big the code should 
+        liquidate all our positions)
+        - 
+    """
+    def __init__(
+        self,
+        lookback: int = 20,
+        vol_window: int = 30,
+        conf_threshold: float = 0.6,
+        position_size: float = 10.0,
+        max_scale: float = 3.0,
+    ):
+        if lookback < 1 or vol_window < 2:
+            raise ValueError("lookback must be >= 1 and vol_window must be >= 2")
+        if position_size <= 0:
+            raise ValueError("position_size must be positive")
+
+        self.lookback = lookback
+        self.vol_window = vol_window
+        self.conf_threshold = conf_threshold
+        self.position_size = position_size
+        self.max_scale = max_scale
+    
+    def add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+
+        df["ret"] = df["Close"].pct_change().fillna(0.0)
+        df["mom"] = df["Close"].pct_change(self.lookback)
+
+        df["vol"] = df["ret"].rolling(self.vol_window, min_periods=2).std()
+
+        # confidence ratio = signal-to-noise
+        vol_floor = df["vol"].replace(0.0, np.nan)
+        df["conf_ratio"] = (df["mom"] / vol_floor).replace([np.inf, -np.inf], 
+        np.nan).fillna(0.0)
+
+        # scaling for sizing (0..max_scale)
+        df["scale"] = (df["conf_ratio"].abs() / self.conf_threshold).clip(0.0, 
+        self.max_scale)
+
+        return df
+    
+    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+
+        df["signal"] = 0
+        df.loc[df["conf_ratio"] > self.conf_threshold, "signal"] = 1
+        df.loc[df["conf_ratio"] < -self.conf_threshold, "signal"] = -1
+
+        # Position = signal (long/short/flat based on current confidence)
+        df["position"] = df["signal"]
+
+        # Size increases with confidence
+        df["target_qty"] = df["position"].abs() * self.position_size * (1.0 + 
+        df["scale"])
+
+        return df
+
+
