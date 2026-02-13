@@ -33,9 +33,13 @@ Example:
             return df
 """
 
-import numpy as np
 import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import sys
+import os
 
+from sentiment_analyzer import MediaSentimentAnalyzer
 
 class Strategy:
     """
@@ -65,192 +69,30 @@ class Strategy:
         df = self.generate_signals(df)
         return df
 
-
-class MovingAverageStrategy(Strategy):
+class SentimentMomentumStrategy(Strategy):
     """
-    Moving average crossover strategy with explicitly defined entry/exit rules.
-    """
-
-    def __init__(self, short_window: int = 20, long_window: int = 60, position_size: float = 10.0):
-        if short_window >= long_window:
-            raise ValueError("short_window must be strictly less than long_window.")
-        if position_size <= 0:
-            raise ValueError("position_size must be positive.")
-        self.short_window = short_window
-        self.long_window = long_window
-        self.position_size = position_size
-
-    def add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["MA_short"] = df["Close"].rolling(self.short_window, min_periods=1).mean()
-        df["MA_long"] = df["Close"].rolling(self.long_window, min_periods=1).mean()
-        df["returns"] = df["Close"].pct_change().fillna(0.0)
-        df["volatility"] = df["returns"].rolling(self.long_window).std().fillna(0.0)
-        return df
-
-    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["signal"] = 0
-
-        buy = (df["MA_short"].shift(1) <= df["MA_long"].shift(1)) & (df["MA_short"] > df["MA_long"])
-        sell = (df["MA_short"].shift(1) >= df["MA_long"].shift(1)) & (df["MA_short"] < df["MA_long"])
-
-        df.loc[buy, "signal"] = 1
-        df.loc[sell, "signal"] = -1
-
-        df["position"] = 0
-        df.loc[df["MA_short"] > df["MA_long"], "position"] = 1
-        df.loc[df["MA_short"] < df["MA_long"], "position"] = -1
-        df["target_qty"] = df["position"].abs() * self.position_size
-        return df
-
-
-class TemplateStrategy(Strategy):
-    """
-    Starter strategy template for students. Modify the indicator and signal
-    logic to build your own ideas.
-    """
-
-    def __init__(
-        self,
-        lookback: int = 14,
-        position_size: float = 10.0,
-        buy_threshold: float = 0.01,
-        sell_threshold: float = -0.01,
-    ):
-        if lookback < 1:
-            raise ValueError("lookback must be at least 1.")
-        if position_size <= 0:
-            raise ValueError("position_size must be positive.")
-        self.lookback = lookback
-        self.position_size = position_size
-        self.buy_threshold = buy_threshold
-        self.sell_threshold = sell_threshold
-
-    def add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["momentum"] = df["Close"].pct_change(self.lookback).fillna(0.0)
-        return df
-
-    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["signal"] = 0
-
-        buy = df["momentum"] > self.buy_threshold
-        sell = df["momentum"] < self.sell_threshold
-
-        df.loc[buy, "signal"] = 1
-        df.loc[sell, "signal"] = -1
-
-        df["position"] = df["signal"].replace(0, np.nan).ffill().fillna(0)
-        df["target_qty"] = df["position"].abs() * self.position_size
-        return df
-
-
-class CryptoTrendStrategy(Strategy):
-    """
-    Crypto trend-following strategy using fast/slow EMAs (long-only).
-    """
-
-    def __init__(self, short_window: int = 7, long_window: int = 21, position_size: float = 100.0):
-        if short_window >= long_window:
-            raise ValueError("short_window must be strictly less than long_window.")
-        if position_size <= 0:
-            raise ValueError("position_size must be positive.")
-        self.short_window = short_window
-        self.long_window = long_window
-        self.position_size = position_size
-
-    def add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["EMA_fast"] = df["Close"].ewm(span=self.short_window, adjust=False).mean()
-        df["EMA_slow"] = df["Close"].ewm(span=self.long_window, adjust=False).mean()
-        return df
-
-    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["signal"] = 0
-        long_regime = df["EMA_fast"] > df["EMA_slow"]
-        flips = long_regime.astype(int).diff().fillna(0)
-        df.loc[flips > 0, "signal"] = 1
-        df.loc[flips < 0, "signal"] = -1
-        df["position"] = long_regime.astype(int)
-        df["target_qty"] = self.position_size
-        return df
-
-class DemoStrategy(Strategy):
-    """
-    Simple demo strategy - buys 1 share when price up, sells 1 share when price down.
-    Uses tiny position size to avoid margin/locate issues.
-
-    Usage:
-        python run_live.py --symbol AAPL --strategy demo --timeframe 1Min --sleep 5 --live
-    """
-
-    def __init__(self, position_size: float = 1.0):
-        self.position_size = position_size
-
-    def add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["change"] = df["Close"].diff().fillna(0.0)
-        return df
-
-    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["signal"] = 0
-        df.loc[df["change"] > 0, "signal"] = 1   # Price went up -> buy
-        df.loc[df["change"] < 0, "signal"] = -1  # Price went down -> sell
-        df["position"] = df["signal"]
-        df["target_qty"] = self.position_size
-        return df
-
-
-## =============================================================================
-## CREATE YOUR OWN STRATEGIES BELOW
-## =============================================================================
-##
-## Example: RSI Strategy
-##
-## class RSIStrategy(Strategy):
-##     """Buy when RSI is oversold, sell when overbought."""
-##
-##     def __init__(self, period=14, oversold=30, overbought=70, position_size=10.0):
-##         self.period = period
-##         self.oversold = oversold
-##         self.overbought = overbought
-##         self.position_size = position_size
-##
-##     def add_indicators(self, df):
-##         delta = df['Close'].diff()
-##         gain = delta.where(delta > 0, 0).rolling(self.period).mean()
-##         loss = (-delta.where(delta < 0, 0)).rolling(self.period).mean()
-##         rs = gain / loss
-##         df['RSI'] = 100 - (100 / (1 + rs))
-##         return df
-##
-##     def generate_signals(self, df):
-##         df['signal'] = 0
-##         df.loc[df['RSI'] < self.oversold, 'signal'] = 1   # Buy when oversold
-##         df.loc[df['RSI'] > self.overbought, 'signal'] = -1  # Sell when overbought
-##         df['position'] = df['signal'].replace(0, np.nan).ffill().fillna(0)
-##         df['target_qty'] = self.position_size
-##         return df
-##
-## To use your strategy:
-##   python run_live.py --symbol AAPL --strategy mystrategy --live
-##
-class SimpleMomentumConfidenceStrategy(Strategy):
-    """
-    Basic momentum strategy with a confidence ratio.
-
+    Momentum strategy enhanced with media sentiment analysis.
+    
+    Technical Signal:
     - Momentum: pct_change over lookback
     - Volatility: rolling std of returns
-    - Confidence ratio: momentum / volatility
-    - Signal: long if conf_ratio > threshold, short if conf_ratio < -threshold, else flat
-    - Position sizing: scales with |conf_ratio| (capped)
-
-    Outputs:
-      - signal:  1 buy, -1 sell, 0 hold
-      - position: 1, -1, or 0
-      - target_qty: desired size
-
-    WHAT WE STILL NEED!!!!
-        - need to add barriers (if the swing is too big the code should 
-        liquidate all our positions)
-        - 
+    - Momentum confidence: momentum / volatility
+    
+    Sentiment Signal:
+    - Fetches news from Finnhub + Google News
+    - Analyzes with FinBERT
+    - Returns confidence [0, 1] where 0.5 is neutral
+    
+    Combined Signal:
+    - combined_conf = momentum_conf * (2 * sentiment_conf - 1)
+    - This scales momentum_conf by sentiment in range [-1, +1]
+    
+    Position Sizing:
+    - Scales with combined confidence
+    - Long if combined_conf > threshold
+    - Short if combined_conf < -threshold
     """
+    
     def __init__(
         self,
         lookback: int = 20,
@@ -258,51 +100,146 @@ class SimpleMomentumConfidenceStrategy(Strategy):
         conf_threshold: float = 0.6,
         position_size: float = 10.0,
         max_scale: float = 3.0,
+        sentiment_weight: float = 0.5,  # How much to weight sentiment (0-1)
+        sentiment_cache_hours: int = 6,  # Cache sentiment for N hours
     ):
         if lookback < 1 or vol_window < 2:
             raise ValueError("lookback must be >= 1 and vol_window must be >= 2")
         if position_size <= 0:
             raise ValueError("position_size must be positive")
-
+        if not 0 <= sentiment_weight <= 1:
+            raise ValueError("sentiment_weight must be between 0 and 1")
+        
         self.lookback = lookback
         self.vol_window = vol_window
         self.conf_threshold = conf_threshold
         self.position_size = position_size
         self.max_scale = max_scale
+        self.sentiment_weight = sentiment_weight
+        self.sentiment_cache_hours = sentiment_cache_hours
+        
+        # Initialize sentiment analyzer
+        self.sentiment_analyzer = MediaSentimentAnalyzer()
+        
+        # Cache for sentiment scores
+        self._sentiment_cache = {}  # symbol -> (timestamp, confidence)
     
-    def add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+    def get_sentiment_confidence(self, symbol: str) -> float:
+        """
+        Get sentiment confidence for a symbol.
+        Uses cache to avoid excessive API calls.
+        
+        Returns:
+            Confidence in [0, 1] where 0.5 is neutral
+        """
+        now = datetime.now()
+        
+        # Check cache
+        if symbol in self._sentiment_cache:
+            cached_time, cached_conf = self._sentiment_cache[symbol]
+            age_hours = (now - cached_time).total_seconds() / 3600
+            
+            if age_hours < self.sentiment_cache_hours:
+                print(f"Using cached sentiment for {symbol}: {cached_conf:.4f} (age: {age_hours:.1f}h)")
+                return cached_conf
+        
+        # Fetch new sentiment
+        try:
+            print(f"Fetching fresh sentiment for {symbol}...")
+            confidence, results = self.sentiment_analyzer.analyze_symbol(
+                symbol, 
+                hours_back=24
+            )
+            
+            # Cache the result
+            self._sentiment_cache[symbol] = (now, confidence)
+            
+            print(f"Sentiment confidence for {symbol}: {confidence:.4f}")
+            return confidence
+            
+        except Exception as e:
+            print(f"Error fetching sentiment for {symbol}: {e}")
+            print("Using neutral sentiment (0.5)")
+            return 0.5  # Neutral if sentiment fetch fails
+    
+    def add_indicators(self, df: pd.DataFrame, symbol: str = None) -> pd.DataFrame:
+        """
+        Add momentum indicators and fetch sentiment.
+        
+        Args:
+            df: Price data
+            symbol: Stock ticker (required for sentiment)
+        """
         df = df.copy()
-
+        
+        # Technical indicators (same as original)
         df["ret"] = df["Close"].pct_change().fillna(0.0)
         df["mom"] = df["Close"].pct_change(self.lookback)
-
         df["vol"] = df["ret"].rolling(self.vol_window, min_periods=2).std()
-
-        # confidence ratio = signal-to-noise
+        
+        # Momentum confidence ratio
         vol_floor = df["vol"].replace(0.0, np.nan)
-        df["conf_ratio"] = (df["mom"] / vol_floor).replace([np.inf, -np.inf], 
-        np.nan).fillna(0.0)
-
-        # scaling for sizing (0..max_scale)
-        df["scale"] = (df["conf_ratio"].abs() / self.conf_threshold).clip(0.0, 
-        self.max_scale)
-
+        df["momentum_conf"] = (df["mom"] / vol_floor).replace(
+            [np.inf, -np.inf], np.nan
+        ).fillna(0.0)
+        
+        # Fetch sentiment confidence (single value for entire dataframe)
+        if symbol:
+            sentiment_conf = self.get_sentiment_confidence(symbol)
+        else:
+            print("Warning: No symbol provided, using neutral sentiment")
+            sentiment_conf = 0.5
+        
+        # Store sentiment confidence as column
+        df["sentiment_conf"] = sentiment_conf
+        
+        # Convert sentiment from [0, 1] to [-1, +1] (0.5 neutral -> 0)
+        df["sentiment_normalized"] = 2 * df["sentiment_conf"] - 1
+        
+        # Combined confidence: momentum scaled by sentiment
+        # If sentiment is bullish (>0.5), amplify positive momentum
+        # If sentiment is bearish (<0.5), amplify negative momentum
+        df["combined_conf"] = df["momentum_conf"] * (
+            1 + self.sentiment_weight * df["sentiment_normalized"]
+        )
+        
+        # Scaling for position sizing
+        df["scale"] = (df["combined_conf"].abs() / self.conf_threshold).clip(
+            0.0, self.max_scale
+        )
+        
         return df
     
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Generate trading signals based on combined confidence."""
         df = df.copy()
-
+        
+        # Initialize signal
         df["signal"] = 0
-        df.loc[df["conf_ratio"] > self.conf_threshold, "signal"] = 1
-        df.loc[df["conf_ratio"] < -self.conf_threshold, "signal"] = -1
-
-        # Position = signal (long/short/flat based on current confidence)
+        
+        # Long signal: combined confidence > threshold
+        df.loc[df["combined_conf"] > self.conf_threshold, "signal"] = 1
+        
+        # Short signal: combined confidence < -threshold
+        df.loc[df["combined_conf"] < -self.conf_threshold, "signal"] = -1
+        
+        # Position matches signal
         df["position"] = df["signal"]
-
-        # Size increases with confidence
-        df["target_qty"] = df["position"].abs() * self.position_size * (1.0 + 
-        df["scale"])
-
+        
+        # Size scales with combined confidence
+        df["target_qty"] = df["position"].abs() * self.position_size * (1.0 + df["scale"])
+        
         return df
-
-
+    
+    def run(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """
+        Execute the full strategy pipeline.
+        
+        Args:
+            df: Price data
+            symbol: Stock ticker (required for sentiment)
+        """
+        df = df.copy()
+        df = self.add_indicators(df, symbol=symbol)
+        df = self.generate_signals(df)
+        return df
