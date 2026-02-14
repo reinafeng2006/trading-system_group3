@@ -20,7 +20,7 @@ from core.gateway import MarketDataGateway
 from core.matching_engine import MatchingEngine
 from core.order_book import OrderBook
 from core.order_manager import OrderLoggingGateway, OrderManager
-from strategies import MovingAverageStrategy, TemplateStrategy, get_strategy_class
+from strategies import SentimentMomentumStrategy, get_strategy_class
 
 
 DATA_DIR = Path("data")
@@ -44,6 +44,7 @@ def create_sample_data(path: Path, periods: int = 200) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run an offline CSV backtest.")
     parser.add_argument("--csv", type=str, default="", help="Path to a CSV with OHLCV data.")
+    parser.add_argument("--symbol", type=str, default="AAPL", help="Stock symbol for sentiment analysis.")
     parser.add_argument("--strategy", default="ma", help="Strategy name (ma, template, or a class name).")
     parser.add_argument("--short-window", type=int, default=20, help="Short MA window (MA strategy).")
     parser.add_argument("--long-window", type=int, default=60, help="Long MA window (MA strategy).")
@@ -67,18 +68,15 @@ def main() -> None:
         print(f"Sample data generated at {csv_path}.")
 
     strategy_cls = get_strategy_class(args.strategy)
-    if strategy_cls is MovingAverageStrategy:
-        strategy = MovingAverageStrategy(
-            short_window=args.short_window,
-            long_window=args.long_window,
-            position_size=args.position_size,
-        )
-    elif strategy_cls is TemplateStrategy:
-        strategy = TemplateStrategy(
-            lookback=args.momentum_lookback,
-            position_size=args.position_size,
-            buy_threshold=args.buy_threshold,
-            sell_threshold=args.sell_threshold,
+    if strategy_cls is SentimentMomentumStrategy:
+        strategy = SentimentMomentumStrategy(
+            lookback=20,
+            vol_window=30,
+            conf_threshold=0.6,
+            position_size=10.0,
+            max_scale=3.0,
+            sentiment_weight=0.5,
+            sentiment_cache_hours=6
         )
     else:
         try:

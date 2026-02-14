@@ -7,12 +7,8 @@ from typing import Dict, Type
 
 from . import strategy_base
 from .strategy_base import (
-    CryptoTrendStrategy,
-    DemoStrategy,
-    MovingAverageStrategy,
     Strategy,
-    TemplateStrategy,
-    SimpleMomentumConfidenceStrategy
+    SentimentMomentumStrategy
 )
 
 
@@ -23,16 +19,7 @@ def _build_registry() -> Dict[str, Type[Strategy]]:
             continue
         if issubclass(obj, Strategy) and obj.__module__ == strategy_base.__name__:
             registry[name.lower()] = obj
-
-    registry.setdefault("ma", MovingAverageStrategy)
-    registry.setdefault("moving_average", MovingAverageStrategy)
-    registry.setdefault("template", TemplateStrategy)
-    registry.setdefault("student", TemplateStrategy)
-    registry.setdefault("crypto", CryptoTrendStrategy)
-    registry.setdefault("crypto_trend", CryptoTrendStrategy)
-    registry.setdefault("crypto_trend_ema", CryptoTrendStrategy)
-    registry.setdefault("demo", DemoStrategy)
-    registry.setdefault("fast", DemoStrategy)
+    registry.setdefault("sentiment", SentimentMomentumStrategy)
     return registry
 
 
@@ -55,10 +42,7 @@ def list_strategies() -> list[str]:
 
 __all__ = [
     "Strategy",
-    "TemplateStrategy",
-    "MovingAverageStrategy",
-    "CryptoTrendStrategy",
-    "DemoStrategy",
+    "SentimentMomentumStrategy",
     "get_strategy_class",
     "list_strategies",
 ]

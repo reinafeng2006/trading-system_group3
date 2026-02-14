@@ -12,7 +12,7 @@ from core.gateway import MarketDataGateway
 from core.matching_engine import MatchingEngine
 from core.order_book import Order, OrderBook
 from core.order_manager import OrderLoggingGateway, OrderManager
-from strategies import MovingAverageStrategy, Strategy
+from strategies import SentimentMomentumStrategy, Strategy
 
 DATA_DIR = Path("data")
 
@@ -202,7 +202,12 @@ class Backtester:
                     # Backwards compatibility if a strategy ignores context.
                     pass
 
-            signals_df = self.strategy.run(market_df)
+            if hasattr(self.strategy, 'run') and 'symbol' in self.strategy.run.__code__.co_varnames:
+                symbol = getattr(self, 'symbol', 'AAPL')  # Default to AAPL
+                signals_df = self.strategy.run(market_df, symbol=symbol)
+            else:
+                signals_df = self.strategy.run(market_df)
+
             latest = signals_df.iloc[-1]
             timestamp = pd.Timestamp(row["Datetime"])
 

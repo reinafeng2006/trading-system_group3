@@ -30,7 +30,7 @@ import time
 from core.alpaca_trader import AlpacaTrader
 from core.logger import get_logger, get_trade_logger
 from pipeline.alpaca import clean_market_data, save_bars
-from strategies import MovingAverageStrategy, TemplateStrategy, CryptoTrendStrategy, DemoStrategy, get_strategy_class, list_strategies
+from strategies import SentimentMomentumStrategy, get_strategy_class, list_strategies
 
 logger = get_logger("run_live")
 
@@ -82,28 +82,15 @@ def main() -> None:
 
     # Build strategy
     strategy_cls = get_strategy_class(args.strategy)
-    if strategy_cls is MovingAverageStrategy:
-        strategy = MovingAverageStrategy(
-            short_window=args.short_window,
-            long_window=args.long_window,
-            position_size=args.position_size,
-        )
-    elif strategy_cls is TemplateStrategy:
-        strategy = TemplateStrategy(
-            lookback=args.momentum_lookback,
-            position_size=args.position_size,
-            buy_threshold=args.buy_threshold,
-            sell_threshold=args.sell_threshold,
-        )
-    elif strategy_cls is CryptoTrendStrategy:
-        strategy = CryptoTrendStrategy(
-            short_window=args.short_window,
-            long_window=args.long_window,
-            position_size=args.position_size,
-        )
-    elif strategy_cls is DemoStrategy:
-        strategy = DemoStrategy(
-            position_size=args.position_size,
+    if strategy_cls is SentimentMomentumStrategy:
+        strategy = SentimentMomentumStrategy(
+            lookback=20,
+            vol_window=30,
+            conf_threshold=0.6,
+            position_size=10.0,
+            max_scale=3.0,
+            sentiment_weight=0.5,
+            sentiment_cache_hours=6
         )
     else:
         try:

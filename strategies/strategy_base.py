@@ -39,6 +39,7 @@ from datetime import datetime, timedelta
 import sys
 import os
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sentiment_analyzer import MediaSentimentAnalyzer
 
 class Strategy:
