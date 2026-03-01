@@ -101,7 +101,7 @@ class SentimentMomentumStrategy(Strategy):
         self,
         lookback: int = 120,
         vol_window: int = 30,
-        conf_threshold: float = 1.5,
+        conf_threshold: float = 1.6,
         position_size: float = 10.0,
         max_scale: float = 3.0,
         sentiment_weight: float = 0.5,  # How much to weight sentiment (0-1)
@@ -239,7 +239,8 @@ class SentimentMomentumStrategy(Strategy):
         df["position"] = df["signal"].replace(0, np.nan).ffill().fillna(0)
         
         # Size scales with combined confidence
-        df["target_qty"] = df["position"].abs() * self.position_size * (1.0 + df["scale"])
+        df["target_qty"] = (df["position"].abs() * self.position_size * (
+            1.0 + df["scale"]) / (1.0 + df["vol"] * 15))
         df = df.fillna(0)
 
         return df
