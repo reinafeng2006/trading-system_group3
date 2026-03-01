@@ -66,7 +66,10 @@ class Strategy:
     def run(self, df: pd.DataFrame) -> pd.DataFrame:
         """Execute the full strategy pipeline. Do not override."""
         df = df.copy()
-        df = self.add_indicators(df)
+        try:
+            df = self.add_indicators(df, **kwargs)
+        except TypeError:
+            df = self.add_indicators(df)
         df = self.generate_signals(df)
         return df
 
@@ -96,9 +99,9 @@ class SentimentMomentumStrategy(Strategy):
     
     def __init__(
         self,
-        lookback: int = 20,
+        lookback: int = 120,
         vol_window: int = 30,
-        conf_threshold: float = 0.6,
+        conf_threshold: float = 1.5,
         position_size: float = 10.0,
         max_scale: float = 3.0,
         sentiment_weight: float = 0.5,  # How much to weight sentiment (0-1)
@@ -203,12 +206,14 @@ class SentimentMomentumStrategy(Strategy):
         df["combined_conf"] = df["momentum_conf"] * (
             1 + self.sentiment_weight * df["sentiment_normalized"]
         )
+
+        df["combined_conf"] = df["combined_conf"].fillna(0)
         
         # Scaling for position sizing
         df["scale"] = (df["combined_conf"].abs() / self.conf_threshold).clip(
             0.0, self.max_scale
         )
-        
+        df["scale"] = df["scale"].fillna(0)
         return df
     
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -219,17 +224,24 @@ class SentimentMomentumStrategy(Strategy):
         df["signal"] = 0
         
         # Long signal: combined confidence > threshold
-        df.loc[df["combined_conf"] > self.conf_threshold, "signal"] = 1
+        go_long = (df["combined_conf"].shift(1) <= self.conf_threshold) & (
+            df["combined_conf"] > self.conf_threshold)
+
         
         # Short signal: combined confidence < -threshold
-        df.loc[df["combined_conf"] < -self.conf_threshold, "signal"] = -1
+        go_short = (df["combined_conf"].shift(1) >= -self.conf_threshold) & (
+            df["combined_conf"] < -self.conf_threshold)
         
+        df.loc[go_long, "signal"] = 1
+        df.loc[go_short, "signal"] = -1
+
         # Position matches signal
-        df["position"] = df["signal"]
+        df["position"] = df["signal"].replace(0, np.nan).ffill().fillna(0)
         
         # Size scales with combined confidence
         df["target_qty"] = df["position"].abs() * self.position_size * (1.0 + df["scale"])
-        
+        df = df.fillna(0)
+
         return df
     
     def run(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
