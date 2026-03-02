@@ -2,9 +2,7 @@
 Offline backtest runner for a CSV file.
 
 Usage:
-    python run_backtest.py --csv data\\AAPL_1Min_stock_alpaca_clean.csv --strategy ma
-
-Replace "AAPL_1Min_stock_alpaca_clean.csv" with your desired CSV file
+    python run_backtest.py --csv data\\AAPL_1Min_stock_alpaca_clean.csv --strategy sentiment
 """
 
 from __future__ import annotations
@@ -45,13 +43,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run an offline CSV backtest.")
     parser.add_argument("--csv", type=str, default="", help="Path to a CSV with OHLCV data.")
     parser.add_argument("--symbol", type=str, default="AAPL", help="Stock symbol for sentiment analysis.")
-    parser.add_argument("--strategy", default="ma", help="Strategy name (ma, template, or a class name).")
-    parser.add_argument("--short-window", type=int, default=20, help="Short MA window (MA strategy).")
-    parser.add_argument("--long-window", type=int, default=60, help="Long MA window (MA strategy).")
+    parser.add_argument("--strategy", default="sentiment", help="Strategy name (sentiment).")
     parser.add_argument("--position-size", type=float, default=10.0, help="Per-trade position size.")
-    parser.add_argument("--momentum-lookback", type=int, default=14, help="Momentum lookback (template).")
-    parser.add_argument("--buy-threshold", type=float, default=0.01, help="Buy threshold (template).")
-    parser.add_argument("--sell-threshold", type=float, default=-0.01, help="Sell threshold (template).")
     parser.add_argument("--capital", type=float, default=50_000, help="Initial capital.")
     parser.add_argument("--plot", action="store_true", help="Plot equity curve at the end.")
     return parser.parse_args()
@@ -67,24 +60,15 @@ def main() -> None:
         create_sample_data(csv_path)
         print(f"Sample data generated at {csv_path}.")
 
-    strategy_cls = get_strategy_class(args.strategy)
-    if strategy_cls is SentimentMomentumStrategy:
-        strategy = SentimentMomentumStrategy(
-            lookback=20,
-            vol_window=30,
-            conf_threshold=0.6,
-            position_size=10.0,
-            max_scale=3.0,
-            sentiment_weight=0.5,
-            sentiment_cache_hours=6
-        )
-    else:
-        try:
-            strategy = strategy_cls()
-        except TypeError as exc:
-            raise SystemExit(
-                f"{strategy_cls.__name__} must support a no-arg constructor or use --strategy template."
-            ) from exc
+    strategy = SentimentMomentumStrategy(
+        lookback=20,
+        vol_window=30,
+        conf_threshold=0.6,
+        position_size=args.position_size,
+        max_scale=3.0,
+        sentiment_weight=0.5,
+        sentiment_cache_minutes=5.0,
+    )
 
     gateway = MarketDataGateway(csv_path)
     order_book = OrderBook()
