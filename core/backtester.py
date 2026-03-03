@@ -202,11 +202,8 @@ class Backtester:
                     # Backwards compatibility if a strategy ignores context.
                     pass
 
-            if hasattr(self.strategy, 'run') and 'symbol' in self.strategy.run.__code__.co_varnames:
-                symbol = getattr(self, 'symbol', 'AAPL')  # Default to AAPL
-                signals_df = self.strategy.run(market_df, symbol=symbol)
-            else:
-                signals_df = self.strategy.run(market_df)
+            symbol = getattr(self.data_gateway, "symbol", None)
+            signals_df = self.strategy.run(market_df, symbol=symbol)
 
             latest = signals_df.iloc[-1]
             timestamp = pd.Timestamp(row["Datetime"])
